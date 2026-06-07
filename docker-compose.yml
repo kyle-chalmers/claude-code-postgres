@@ -1,0 +1,20 @@
+# One command to stand up a local Postgres with the sample schema loaded:
+#   docker compose up -d
+#
+# Files in sql/ that match *.sql are run automatically on FIRST start, in name
+# order. 01_schema.sql loads the schema + data. The read-only role
+# (02_create_readonly_role.sql) is intentionally NOT auto-run -- creating that
+# role yourself is the whole point, and you should set your own password.
+#
+# Connect as admin:   psql -h localhost -p 55432 -U postgres   (password: demo)
+# Tear down:          docker compose down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: claude-code-postgres
+    environment:
+      POSTGRES_PASSWORD: demo          # local throwaway; never reuse for anything real
+    ports:
+      - "55432:5432"                   # host 55432 -> container 5432 (avoids clashing with a local 5432)
+    volumes:
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
