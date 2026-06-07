@@ -30,10 +30,14 @@ CREATE TABLE orders (
     order_id      serial PRIMARY KEY,
     customer_id   integer NOT NULL REFERENCES customers(customer_id),
     order_date    date NOT NULL,
-    status        text NOT NULL,          -- 'completed' | 'refunded' | 'pending'
+    status        text NOT NULL,          -- 'completed' | 'refunded' ('pending' also valid; none in this sample)
     notes         text                    -- free text; the untrusted-content leg
 );
 
+-- Note: a production order line usually snapshots the sale price at order time.
+-- This demo keeps it simple and derives revenue from the current products.unit_price
+-- (quantity * unit_price), which is fine for a teaching schema but not how you'd
+-- model real orders.
 CREATE TABLE order_items (
     order_id      integer NOT NULL REFERENCES orders(order_id),
     product_id    integer NOT NULL REFERENCES products(product_id),

@@ -2,7 +2,7 @@
 
 Point [Claude Code](https://www.anthropic.com/claude-code) at a real PostgreSQL database, ask questions in plain English, and read the answers, without ever giving the agent the power to change a single row. The safe version of this comes down to three habits:
 
-1. **Create a read-only role first** so the agent physically cannot write, drop, or delete. The database enforces it, not the model's good behavior.
+1. **Create a read-only role first** so the agent cannot write to, drop, or delete your data. The database enforces it, not the model's good behavior.
 2. **Read the SQL it writes before it runs.** A strong model rarely produces broken SQL; the quieter failure is correct SQL that answers the wrong question.
 3. **Be honest about what leaves your machine.** The SQL runs locally, but your question, the schema, and the result rows (including any PII) go to the model API.
 
@@ -14,7 +14,7 @@ This repo is the companion to the video. It gives you a small sample database, t
 
 `psql` is PostgreSQL's official, first-party command-line client. It ships with Postgres, so there is nothing third-party between Claude Code and your database. That is the path this repo uses, and the one to reach for.
 
-You will also hear about MCP servers. Worth knowing: **there is no official Postgres MCP server.** Anthropic published a reference one, but reference servers are teaching examples, not production tools, and it is archived (it is also the subject of a [documented SQL-injection](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/)). Every usable option today is community or vendor ([Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp), pgEdge, Supabase, Neon). They are reasonable if you want structured tooling, just go in knowing you are trusting and maintaining a third-party server, and that whichever way you connect, **the read-only database role is the thing that actually protects you.**
+You will also hear about MCP servers. Worth knowing: **there is no official, PostgreSQL-project MCP server.** Anthropic published a reference one, but reference servers are teaching examples, not production tools, and it is archived (it is also the subject of a [documented SQL-injection](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/)). Every usable option today is community or vendor ([Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp), pgEdge, Supabase, Neon). They are reasonable if you want structured tooling, just go in knowing you are trusting and maintaining a third-party server, and that whichever way you connect, **the read-only database role is the thing that actually protects you.**
 
 ![The egress boundary: SQL runs locally, your question and result rows go to the model API](./images/egress-boundary.png)
 
@@ -23,7 +23,7 @@ You will also hear about MCP servers. Worth knowing: **there is no official Post
 | Tool | Why | Install |
 |------|-----|---------|
 | Docker | Runs the local Postgres in one command | https://docs.docker.com/get-docker/ |
-| `psql` (PostgreSQL client) | The official client Claude Code shells out to | `brew install libpq` (macOS) or your package manager |
+| `psql` (PostgreSQL client) | The official client Claude Code shells out to | macOS: `brew install postgresql@16` (puts `psql` on your PATH). `brew install libpq` also works but is keg-only, so you must add it to PATH: `echo 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"' >> ~/.zshrc` |
 | Claude Code | The agent that writes and runs the SQL | https://www.anthropic.com/claude-code |
 
 No cloud account, no production database. Everything here is local and disposable.
@@ -33,17 +33,17 @@ No cloud account, no production database. Everything here is local and disposabl
 **1. Start Postgres with the sample schema loaded:**
 
 ```bash
-docker compose up -d
+docker compose up -d --wait
 ```
 
-This runs `postgres:16-alpine` on `localhost:55432` and auto-loads [`sql/01_schema.sql`](./sql/01_schema.sql) (a small `shop` schema: `customers`, `products`, `orders`, `order_items`).
+This runs `postgres:16-alpine` on `localhost:55432` and auto-loads [`sql/01_schema.sql`](./sql/01_schema.sql) (a small `shop` schema: `customers`, `products`, `orders`, `order_items`). The `--wait` flag blocks until the database is actually accepting connections, so the next step can't race a cold start. (Port `55432`, not the default `5432`, so this won't clash with a Postgres you already run locally.)
 
 **2. Create the read-only role (do this yourself, as admin):**
 
 Open [`sql/02_create_readonly_role.sql`](./sql/02_create_readonly_role.sql), set your own password where marked, then run it:
 
 ```bash
-psql -h localhost -p 55432 -U postgres -f sql/02_create_readonly_role.sql   # password: demo
+psql -h localhost -p 55432 -U postgres -v ON_ERROR_STOP=1 -f sql/02_create_readonly_role.sql   # password: demo
 ```
 
 Creating this role is the highest-impact step, and you set the password, not the agent. Keep secrets out of the model's hands.
@@ -57,7 +57,20 @@ PGPASSWORD='<the password you set>' psql -h localhost -p 55432 -U analyst_ro -d 
 
 A `DROP` is refused (`must be owner`), an `UPDATE` is refused (`permission denied`), and a `SELECT` works. The destructive part is gone.
 
-**4. Point Claude Code at it as the read-only role.** Connect with `psql` through Bash using the `analyst_ro` login (keep the password in `~/.pgpass` at `chmod 0600` so it never lands in your shell history). Then ask in plain English.
+**4. Point Claude Code at it as the read-only role.** Put the `analyst_ro` password in `~/.pgpass` so it never lands in your shell history:
+
+```bash
+echo 'localhost:55432:postgres:analyst_ro:<the password you set>' >> ~/.pgpass
+chmod 0600 ~/.pgpass     # libpq ignores ~/.pgpass unless it's 0600
+```
+
+Then start Claude Code in this folder and let it connect as `analyst_ro` over Bash, e.g.:
+
+```bash
+claude "Connect to Postgres as analyst_ro: psql -h localhost -p 55432 -U analyst_ro -d postgres. From now on, write the SQL, show it to me, wait for my OK, then run it."
+```
+
+Approve the `psql` Bash call when prompted, then ask in plain English. (The repo's [`CLAUDE.md`](./CLAUDE.md) already tells the agent to connect as `analyst_ro` and to show SQL before running it.)
 
 > Want to check the whole thing end to end first? Run `bash scripts/validate.sh` — it stands up a throwaway Postgres, creates the role, proves writes are blocked, and runs the demo queries.
 
