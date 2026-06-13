@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # End-to-end check that the demo works: stands up Postgres, loads the schema,
-# creates the read-only role FROM THE ACTUAL FILE viewers run (sql/02), proves
+# creates the read-only role FROM THE ACTUAL FILE you run (sql/02), proves
 # writes are blocked, and runs the demo queries as analyst_ro (the role the agent
 # uses). Uses a throwaway role password for automated checking only -- when you do
 # this for real, set your own password in sql/02_create_readonly_role.sql.
 #
 # Usage:  bash scripts/validate.sh
+#
+# This validates the LOCAL path (the canonical, no-account reproducible check).
+# The cloud path uses the same sql/02 role file; see the README "Connect to a
+# cloud Postgres" section. Nothing here needs a cloud account.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -9,6 +9,14 @@
 -- password: set your own where marked, then run it.
 --
 --   psql -h localhost -p 55432 -U postgres -v ON_ERROR_STOP=1 -f sql/02_create_readonly_role.sql
+--
+-- Same file works against a managed cloud Postgres (Neon, Supabase, RDS/Aurora,
+-- Cloud SQL, Azure, Render, Railway): connect as your project's OWNER role rather
+-- than a local superuser (on Neon that is the <db>_owner role, which can CREATE
+-- ROLE) and add ?sslmode=require to the connection. The GRANTs below are unchanged:
+--
+--   psql "postgresql://<owner>:<pw>@<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require" \
+--     -v ON_ERROR_STOP=1 -f sql/02_create_readonly_role.sql
 
 -- 1. The login. Set your own password here; keep secrets out of the model's hands.
 CREATE ROLE analyst_ro LOGIN PASSWORD 'CHANGE_ME_BEFORE_RUNNING';
@@ -18,7 +26,9 @@ GRANT USAGE ON SCHEMA shop TO analyst_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA shop TO analyst_ro;
 
 -- 3. GRANT ON ALL TABLES only covers tables that exist right now. So that a table
---    you add later is readable too (without re-granting), set the default:
+--    you add later is readable too (without re-granting), set the default. Note:
+--    ALTER DEFAULT PRIVILEGES applies to objects created by the role that runs it;
+--    for tables another role creates in this schema, add FOR ROLE that_role.
 ALTER DEFAULT PRIVILEGES IN SCHEMA shop GRANT SELECT ON TABLES TO analyst_ro;
 
 -- 4. Quality-of-life + guardrails for an agent-driven session:
