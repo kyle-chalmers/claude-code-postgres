@@ -1,10 +1,11 @@
 # Claude Code + PostgreSQL: query your database in plain English, safely
 
-Point [Claude Code](https://www.anthropic.com/claude-code) at a real PostgreSQL database, ask questions in plain English, and read the answers, without ever giving the agent the power to change a single row. The safe version of this comes down to three habits:
+Point [Claude Code](https://www.anthropic.com/claude-code) at a real PostgreSQL database, ask questions in plain English, and read the answers, without ever giving the agent the power to change a single row or read a raw personal record. The safe version puts the guardrails at the database:
 
 1. **Create a read-only role first** so the agent cannot write to, drop, or delete your data. The database enforces it, not the model's good behavior.
-2. **Read the SQL it writes before it runs.** A strong model rarely produces broken SQL; the quieter failure is correct SQL that answers the wrong question.
-3. **Be honest about what leaves your machine.** When the database is in the cloud the SQL runs on the provider's server (your local `psql` only sends the query text and receives rows), and your question, the schema, and the result rows (including any PII) go on to a separate model API.
+2. **Put a curated, PII-safe schema in front of it** (see [Connect to PII safely](#connect-to-pii-safely-point-the-agent-at-production-responsibly)) so it analyzes real data without ever reading raw personal values: hash what it must join on, drop the rest.
+3. **Read the SQL it writes before it runs.** A strong model rarely produces broken SQL; the quieter failure is correct SQL that answers the wrong question.
+4. **Be honest about what leaves your machine.** When the database is in the cloud the SQL runs on the provider's server (your local `psql` only sends the query text and receives rows), and your question, the schema, and the result rows go on to a separate model API.
 
 This repo is the companion to the video. It gives you a small sample database, the exact read-only role commands, and the prompts to try, so you can reproduce the whole thing in a few minutes.
 
@@ -16,7 +17,7 @@ This repo is the companion to the video. It gives you a small sample database, t
 
 You will also hear about MCP servers. Worth knowing: **there is no official, PostgreSQL-project MCP server.** Anthropic published a reference one, but reference servers are teaching examples, not production tools, and it is archived (it is also the subject of a [documented SQL-injection](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/)). Every usable option today is community or vendor ([Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp), pgEdge, Supabase, Neon). They are reasonable if you want structured tooling, just go in knowing you are trusting and maintaining a third-party server, and that whichever way you connect, **the read-only database role is the thing that actually protects you.**
 
-![The egress boundary: SQL runs locally, your question and result rows go to the model API](./images/egress-boundary.png)
+![The egress boundary: psql runs locally, the SQL executes on the database, your question and result rows go to the model API](./images/egress-boundary.png)
 
 ## Prerequisites
 
@@ -26,7 +27,7 @@ You will also hear about MCP servers. Worth knowing: **there is no official, Pos
 | `psql` (PostgreSQL client) | The official client Claude Code shells out to | macOS: `brew install libpq`, then add it to PATH: `echo 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"' >> ~/.zshrc`. (libpq is keg-only, and the versioned `postgresql@16` formula is keg-only too, so both need this PATH step. Install the full `postgresql@16` if you also want a local server.) |
 | Claude Code | The agent that writes and runs the SQL | https://www.anthropic.com/claude-code |
 
-Two ways to run the database: the **local Docker** path below needs no cloud account and is fully disposable, and the [**cloud Postgres**](#connect-to-a-cloud-postgres-the-same-thing-on-a-real-server) path needs only a free Neon or Supabase project. Either way, never point this at a production database.
+Two ways to run the database: the **local Docker** path below needs no cloud account and is fully disposable, and the [**cloud Postgres**](#connect-to-a-cloud-postgres-the-same-thing-on-a-real-server) path needs only a free Neon or Supabase project. The raw `shop` tables here are sample data; before you point Claude Code at real production data, put it behind the curated PII-safe schema in [Connect to PII safely](#connect-to-pii-safely-point-the-agent-at-production-responsibly).
 
 ## Setup
 
@@ -57,7 +58,7 @@ PGPASSWORD='<the password you set>' psql -h localhost -p 55432 -U analyst_ro -d 
 
 A `DROP` is refused (`must be owner`), an `UPDATE` is refused (`permission denied`), and a `SELECT` works. The destructive part is gone.
 
-**4. Point Claude Code at it as the read-only role.** Put the `analyst_ro` password in `~/.pgpass` so it never lands in your shell history:
+**4. Point Claude Code at it as the read-only role.** Put the `analyst_ro` password in `~/.pgpass` (edit the file directly, or prepend the command with a space, so the password itself stays out of shell history):
 
 ```bash
 echo 'localhost:55432:postgres:analyst_ro:<the password you set>' >> ~/.pgpass
@@ -76,7 +77,7 @@ Approve the `psql` Bash call when prompted, then ask in plain English. (The repo
 
 ## Connect to a cloud Postgres (the same thing, on a real server)
 
-The local Docker database above is the zero-setup way to follow along. In real life your database lives on a server, not on your laptop, so here is the same workflow against a managed cloud Postgres. Use a fresh, disposable dev or staging project for this, never a live production database. The host, the login, and requiring SSL change, and the exact admin role you create the read-only role from varies by provider; the rest of the workflow does not. This works the same on Neon, Supabase, Amazon RDS or Aurora, Google Cloud SQL, Azure Database for PostgreSQL, Render, and Railway. The examples below use [Neon](https://neon.tech)'s free tier.
+The local Docker database above is the zero-setup way to follow along. In real life your database lives on a server, not on your laptop, so here is the same workflow against a managed cloud Postgres. This raw walkthrough uses sample data; to point Claude Code at real production data, add the curated PII-safe layer below first. The host, the login, and requiring SSL change, and the exact admin role you create the role from varies by provider; the rest of the workflow does not. This works the same on Neon, Supabase, Amazon RDS or Aurora, Google Cloud SQL, Azure Database for PostgreSQL, Render, and Railway. The examples below use [Neon](https://neon.tech)'s free tier.
 
 **1. Create a database and load the schema.** Create a project (on Neon, a free one is enough), then load the same schema into it as the project owner role:
 
@@ -92,7 +93,7 @@ psql "postgresql://<owner>:<owner-pw>@<endpoint>.<region>.aws.neon.tech/<db>?ssl
   -v ON_ERROR_STOP=1 -f sql/02_create_readonly_role.sql
 ```
 
-**3. Put the read-only login in `~/.pgpass`** with the provider's host on the line (SSL goes in the connection string, not in `.pgpass`). The host in `.pgpass` must exactly match the host in your connection string; Neon exposes both a pooled `-pooler` host and a direct host, so pick one and use it in both places:
+**3. Put the read-only login in `~/.pgpass`** with the provider's host on the line (SSL goes in the connection string, not in `.pgpass`; edit the file directly or prepend the command with a space so the password stays out of shell history). The host in `.pgpass` must exactly match the host in your connection string; Neon exposes both a pooled `-pooler` host and a direct host, so pick one and use it in both places:
 
 ```bash
 echo '<endpoint>.<region>.aws.neon.tech:5432:<db>:analyst_ro:<the password you set>' >> ~/.pgpass
@@ -134,7 +135,25 @@ Set one standing rule for the session first: *"Write the SQL, show it to me, wai
 
 When the database is in the cloud, two more honest notes apply: your provider holds the data at rest on their infrastructure, and the connection is encrypted in transit (`sslmode=require`), which managed providers force (`require` encrypts but does not verify the server's identity; `verify-full` does, using a CA cert your provider supplies). None of that changes the model-API hop above.
 
-This is for reading and analysis on a local, cloud dev, or staging copy (or a read replica), not your live production database, and not where your whole team writes against it at once.
+You can point this at production. The responsible way is not avoiding production, it is putting the guardrails at the database first: the read-only role below, plus a curated, PII-safe schema. Where this is still not the answer: write-heavy workloads, or one instance the whole team writes against at once.
+
+## Connect to PII safely (point the agent at production, responsibly)
+
+A read-only role stops writes. It does nothing to stop raw PII being read into the model. The fix is a curated schema: the agent queries real data, but the raw values never reach it. [`sql/03_pii_safe_layer.sql`](./sql/03_pii_safe_layer.sql) builds the Postgres version of the three principles from the companion video ["So AI Can Access Your Database's PII, What to Do?"](https://www.youtube.com/watch?v=NJolk9KBn7c):
+
+1. **Schema segregation.** The agent reaches one curated schema (`ai_curated`); the raw tables, and the salts, live where it cannot.
+2. **Hashing with a stable per-entity salt.** PII the agent must join on (an email, a phone) becomes a SHA-256 hash with a stable per-entity salt: a pseudonym it can join on but cannot read back to the raw value. The salts sit in a separate `ai_private` schema the agent is never granted, so it cannot reverse the hash, and keeping the salt private is what stops a low-entropy value like a phone from being brute-forced. PII it does not need is dropped (free text becomes a length).
+3. **Identity selection.** A dedicated `analyst_ai` role granted only `ai_curated`, nothing on the raw schema.
+
+Run it after steps 1 and 2 (set the role password the same way you did for `analyst_ro`):
+
+```bash
+psql -h localhost -p 55432 -U postgres -v ON_ERROR_STOP=1 -f sql/03_pii_safe_layer.sql
+```
+
+Then prove it as `analyst_ai`: `SELECT email_hash FROM ai_curated.customers` works (hash only), `SELECT email FROM shop.customers` is refused. The agent can still do real analysis (joins, revenue, cohorts) over the curated views; it just can never read a raw value. `bash scripts/validate.sh` checks this end to end.
+
+Why a view is enough to enforce it: a Postgres view reads its base tables with the view owner's privileges, so the curated views (owned by admin) read the raw tables under the hood while the agent holds `SELECT` on the views only.
 
 ## Project structure
 
@@ -143,9 +162,10 @@ claude-code-postgres/
 ├── docker-compose.yml              # one-command local Postgres, auto-loads the schema
 ├── sql/
 │   ├── 01_schema.sql               # the shop schema + sample data (PII + a notes column)
-│   └── 02_create_readonly_role.sql # the read-only role (set your own password, run as admin)
+│   ├── 02_create_readonly_role.sql # the read-only role (set your own password, run as admin)
+│   └── 03_pii_safe_layer.sql       # curated schema + masked views + scoped AI role (PII-safe)
 ├── scripts/
-│   └── validate.sh                 # end-to-end check: role enforced + the demo queries
+│   └── validate.sh                 # end-to-end check: read-only role + PII-safe layer + demo queries
 ├── images/
 │   └── egress-boundary.png         # what stays local vs what goes to the model API
 ├── .env.example                    # connection vars (no secrets)
