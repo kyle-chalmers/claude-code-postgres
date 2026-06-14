@@ -17,6 +17,8 @@ This repo is the companion to the video. It gives you a small sample database, t
 
 You will also hear about MCP servers. Worth knowing: **there is no official, PostgreSQL-project MCP server.** Anthropic published a reference one, but reference servers are teaching examples, not production tools, and it is archived (it is also the subject of a [documented SQL-injection](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/)). Every usable option today is community or vendor ([Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp), pgEdge, Supabase, Neon). They are reasonable if you want structured tooling, just go in knowing you are trusting and maintaining a third-party server, and that whichever way you connect, **the read-only database role is the thing that actually protects you.**
 
+If you do want the structured-tooling path, set it up the way the vendor recommends. Supabase, for example, says to use their MCP server against a development project, or in read-only and project-scoped mode if real data is unavoidable: `claude mcp add supabase --env SUPABASE_ACCESS_TOKEN=<token> -- npx -y @supabase/mcp-server-supabase@latest --read-only --project-ref=<ref>`. They also ship [Postgres best-practices Agent Skills](https://github.com/supabase/agent-skills) so the agent writes better SQL (`claude plugin marketplace add supabase/agent-skills`, then `claude plugin install postgres-best-practices@supabase-agent-skills`). Point any of these at the curated, read-only schema below and the guardrails still do the protecting.
+
 ![The egress boundary: psql runs locally, the SQL executes on the database, your question and result rows go to the model API](./images/egress-boundary.png)
 
 ## Prerequisites
@@ -155,6 +157,8 @@ Then prove it as `analyst_ai`: `SELECT email_hash FROM ai_curated.customers` wor
 
 Why a view is enough to enforce it: a Postgres view reads its base tables with the view owner's privileges, so the curated views (owned by admin) read the raw tables under the hood while the agent holds `SELECT` on the views only.
 
+Doing this on your own production database? [`docs/apply-to-your-own-database.md`](./docs/apply-to-your-own-database.md) is the adapt-and-apply runbook: how to build your curated views, plus a copy-paste prompt that reviews, drift-checks, dry-runs, applies, and verifies, with you (not the agent) setting the role password.
+
 ## Project structure
 
 ```
@@ -166,6 +170,8 @@ claude-code-postgres/
 │   └── 03_pii_safe_layer.sql       # curated schema + masked views + scoped AI role (PII-safe)
 ├── scripts/
 │   └── validate.sh                 # end-to-end check: read-only role + PII-safe layer + demo queries
+├── docs/
+│   └── apply-to-your-own-database.md # runbook: adapt + safely apply the PII-safe layer to your prod
 ├── images/
 │   └── egress-boundary.png         # what stays local vs what goes to the model API
 ├── .env.example                    # connection vars (no secrets)
