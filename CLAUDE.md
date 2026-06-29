@@ -24,7 +24,7 @@ Cardinality worth remembering: one customer has many orders; one order has many 
 Use `psql`, PostgreSQL's official command-line client, through Bash. Do not reach for a third-party MCP server: there is no official Postgres MCP server (the reference one is archived), and the database role is what actually enforces safety regardless of the client.
 
 - Admin (schema + role setup only): `psql -h localhost -p 55432 -U postgres` (password in `~/.pgpass`). On a managed cloud Postgres, connect as the project owner role instead (on Neon, `<db>_owner`) and add `?sslmode=require`.
-- Analysis on real/PII-bearing data: connect as `analyst_ai`, the curated role scoped to the `ai_curated` PII-safe schema (set up by `sql/03`). It never reaches raw tables. Cloud: `psql "postgresql://analyst_ai@<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require"`.
+- Analysis on real/PII-bearing data: connect as `ai_agent`, the curated role scoped to the `ai_curated` PII-safe schema (set up by `sql/03`). It never reaches raw tables. Cloud: `psql "postgresql://ai_agent@<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require"`.
 - Read-only on the raw `shop` sample: connect as `analyst_ro` (`psql -h localhost -p 55432 -U analyst_ro -d postgres`). This is the basic sandbox role and the deliberate "watch the PII leak, then fix it with the curated schema" teaching step, not the steady-state for real data.
 
 Credentials belong in `~/.pgpass` (`chmod 0600`), never inline in a command or in shell history. On a cloud connection, SSL is required and goes in the connection string, not in `~/.pgpass`.
@@ -32,7 +32,7 @@ Credentials belong in `~/.pgpass` (`chmod 0600`), never inline in a command or i
 ## Conventions
 
 - **Write the SQL, show it, wait for approval, then run it.** This is a standing rule for every query, not a one-time ask. The value of an agent here is that a human can read the generated SQL before it executes.
-- **Prefer `analyst_ai` (the curated, PII-safe role) for analysis on real data;** `analyst_ro` reads the raw sample only. Only use the admin/owner login to create the schema, roles, or the curated layer.
+- **Prefer `ai_agent` (the curated, PII-safe role) for analysis on real data;** `analyst_ro` reads the raw sample only. Only use the admin/owner login to create the schema, roles, or the curated layer.
 - **Never generate or hardcode a password.** When creating the read-only role, emit the SQL with a placeholder and let the human set the secret and run it.
 - **Scope grants to the schema, SELECT only.** `GRANT USAGE ON SCHEMA shop` + `GRANT SELECT ON ALL TABLES IN SCHEMA shop`; set `ALTER DEFAULT PRIVILEGES` so future tables are covered. Never grant write privileges.
 - **Confirm grain and filters on aggregates.** State whether a number is per-order or per-line-item; confirm whether `status` should be filtered (e.g. exclude `refunded`) before reporting a total.

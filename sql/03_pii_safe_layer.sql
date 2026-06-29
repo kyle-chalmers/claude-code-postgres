@@ -68,19 +68,19 @@ CREATE OR REPLACE VIEW ai_curated.products AS
 
 -- 4. Identity selection: a dedicated AI role that can reach ONLY ai_curated.
 --    Set your own password where marked, the same way you do for analyst_ro.
-CREATE ROLE analyst_ai LOGIN PASSWORD 'CHANGE_ME_BEFORE_RUNNING';
+CREATE ROLE ai_agent LOGIN PASSWORD 'CHANGE_ME_BEFORE_RUNNING';
 
-GRANT USAGE ON SCHEMA ai_curated TO analyst_ai;
-GRANT SELECT ON ALL TABLES IN SCHEMA ai_curated TO analyst_ai;   -- covers views too
-ALTER DEFAULT PRIVILEGES IN SCHEMA ai_curated GRANT SELECT ON TABLES TO analyst_ai;
+GRANT USAGE ON SCHEMA ai_curated TO ai_agent;
+GRANT SELECT ON ALL TABLES IN SCHEMA ai_curated TO ai_agent;   -- covers views too
+ALTER DEFAULT PRIVILEGES IN SCHEMA ai_curated GRANT SELECT ON TABLES TO ai_agent;
 
 -- Guardrails (same spirit as analyst_ro): resolve names against the curated schema,
 -- and cap a runaway read so an accidental cross join can't hammer the database.
-ALTER ROLE analyst_ai SET search_path TO ai_curated;
-ALTER ROLE analyst_ai SET statement_timeout = '30s';
+ALTER ROLE ai_agent SET search_path TO ai_curated;
+ALTER ROLE ai_agent SET statement_timeout = '30s';
 
--- Crucially, analyst_ai is granted NOTHING on the shop schema. The raw PII tables
--- are unreachable for it. Prove it (run as analyst_ai):
+-- Crucially, ai_agent is granted NOTHING on the shop schema. The raw PII tables
+-- are unreachable for it. Prove it (run as ai_agent):
 --   SELECT email_hash FROM ai_curated.customers LIMIT 1;  -> works, hash only
 --   SELECT email      FROM shop.customers       LIMIT 1;  -> ERROR: permission denied for schema shop
 --

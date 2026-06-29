@@ -145,7 +145,7 @@ A read-only role stops writes. It does nothing to stop raw PII being read into t
 
 1. **Schema segregation.** The agent reaches one curated schema (`ai_curated`); the raw tables, and the salts, live where it cannot.
 2. **Hashing with a stable per-entity salt.** PII the agent must join on (an email, a phone) becomes a SHA-256 hash with a stable per-entity salt: a pseudonym it can join on but cannot read back to the raw value. The salts sit in a separate `ai_private` schema the agent is never granted, so it cannot reverse the hash, and keeping the salt private is what stops a low-entropy value like a phone from being brute-forced. PII it does not need is dropped (free text becomes a length).
-3. **Identity selection.** A dedicated `analyst_ai` role granted only `ai_curated`, nothing on the raw schema.
+3. **Identity selection.** A dedicated `ai_agent` role granted only `ai_curated`, nothing on the raw schema.
 
 Run it after steps 1 and 2 (set the role password the same way you did for `analyst_ro`):
 
@@ -153,7 +153,7 @@ Run it after steps 1 and 2 (set the role password the same way you did for `anal
 psql -h localhost -p 55432 -U postgres -v ON_ERROR_STOP=1 -f sql/03_pii_safe_layer.sql
 ```
 
-Then prove it as `analyst_ai`: `SELECT email_hash FROM ai_curated.customers` works (hash only), `SELECT email FROM shop.customers` is refused. The agent can still do real analysis (joins, revenue, cohorts) over the curated views; it just can never read a raw value. `bash scripts/validate.sh` checks this end to end.
+Then prove it as `ai_agent`: `SELECT email_hash FROM ai_curated.customers` works (hash only), `SELECT email FROM shop.customers` is refused. The agent can still do real analysis (joins, revenue, cohorts) over the curated views; it just can never read a raw value. `bash scripts/validate.sh` checks this end to end.
 
 Why a view is enough to enforce it: a Postgres view reads its base tables with the view owner's privileges, so the curated views (owned by admin) read the raw tables under the hood while the agent holds `SELECT` on the views only.
 
