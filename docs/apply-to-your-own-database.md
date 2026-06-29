@@ -14,15 +14,15 @@ For every table you want the agent to analyze, add a view in an `ai_curated` sch
 Then create one scoped role that can reach only the curated schema:
 
 ```sql
-CREATE ROLE analyst_ai NOLOGIN;                       -- set LOGIN + password yourself, later
-GRANT USAGE ON SCHEMA ai_curated TO analyst_ai;
-GRANT SELECT ON ALL TABLES IN SCHEMA ai_curated TO analyst_ai;
-ALTER ROLE analyst_ai SET search_path TO ai_curated;
-ALTER ROLE analyst_ai SET statement_timeout = '30s';  -- read-only does not stop a runaway scan
--- analyst_ai is granted NOTHING on your raw schema, so the raw tables are unreachable.
+CREATE ROLE ai_agent NOLOGIN;                       -- set LOGIN + password yourself, later
+GRANT USAGE ON SCHEMA ai_curated TO ai_agent;
+GRANT SELECT ON ALL TABLES IN SCHEMA ai_curated TO ai_agent;
+ALTER ROLE ai_agent SET search_path TO ai_curated;
+ALTER ROLE ai_agent SET statement_timeout = '30s';  -- read-only does not stop a runaway scan
+-- ai_agent is granted NOTHING on your raw schema, so the raw tables are unreachable.
 ```
 
-The curated views are owned by the admin who creates them, so they read the raw tables under the hood (Postgres views use the owner's privileges) while `analyst_ai` holds `SELECT` on the views only. See `sql/03` for the worked version, including the salts table and the masked views.
+The curated views are owned by the admin who creates them, so they read the raw tables under the hood (Postgres views use the owner's privileges) while `ai_agent` holds `SELECT` on the views only. See `sql/03` for the worked version, including the salts table and the masked views.
 
 ## 2. Apply it safely
 
@@ -31,7 +31,7 @@ Paste this into a Claude Code session that has your **owner/admin** database acc
 ```
 Help me apply a PII-safe curated layer to my production Postgres, carefully.
 I have drafted the SQL (a curated ai_curated schema of masked views + a private
-ai_private salt schema + a scoped read-only analyst_ai role). Do this in order and
+ai_private salt schema + a scoped read-only ai_agent role). Do this in order and
 STOP if anything looks off:
 
 1. REVIEW: confirm the SQL is additive-only (CREATE SCHEMA/VIEW/ROLE/GRANT only;
@@ -40,18 +40,18 @@ STOP if anything looks off:
    the live table (information_schema.columns). Stop on any missing/renamed column.
 3. DRY-RUN, not prod: apply it to a branch, a staging copy, or a throwaway clone,
    then verify as a test login:
-     - analyst_ai reads ai_curated and gets hashes, not raw PII
-     - analyst_ai can SELECT zero raw tables:
+     - ai_agent reads ai_curated and gets hashes, not raw PII
+     - ai_agent can SELECT zero raw tables:
        SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname='public' AND c.relkind='r'
-         AND has_table_privilege('analyst_ai', c.oid, 'SELECT');   -- must be 0
-     - analyst_ai cannot read ai_private (the salts)
+         AND has_table_privilege('ai_agent', c.oid, 'SELECT');   -- must be 0
+     - ai_agent cannot read ai_private (the salts)
      - a hashed join key matches across two tables for the same entity
    Show me the results.
 4. APPLY TO PRODUCTION only after I approve the dry-run.
 5. STOP for the password: I will set it myself, in a session you do not see
-   (ALTER ROLE analyst_ai LOGIN PASSWORD '...'). Do not generate or store it.
-6. After I set it, put the analyst_ai password in ~/.pgpass (chmod 0600; sslmode goes
+   (ALTER ROLE ai_agent LOGIN PASSWORD '...'). Do not generate or store it.
+6. After I set it, put the ai_agent password in ~/.pgpass (chmod 0600; sslmode goes
    in the connection string), and re-run the step-3 checks against production.
 ```
 

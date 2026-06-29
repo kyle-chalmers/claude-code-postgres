@@ -78,20 +78,20 @@ echo "== 6. PII-safe layer (sql/03): curated schema + masked views + scoped AI r
 AI_PW=ai_test
 sed "s/CHANGE_ME_BEFORE_RUNNING/${AI_PW}/" sql/03_pii_safe_layer.sql \
   | docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 >/dev/null
-aix() { docker exec -e PGPASSWORD="${AI_PW}" "$NAME" psql -U analyst_ai -d postgres "$@"; }
+aix() { docker exec -e PGPASSWORD="${AI_PW}" "$NAME" psql -U ai_agent -d postgres "$@"; }
 hash=$(aix -tA -c "SELECT email_hash FROM ai_curated.customers WHERE customer_id=1;")
 echo "   curated email_hash -> ${hash}"
 [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL: email not a 64-hex hash"; exit 1; }
 raw_out=$(aix -c "SELECT email FROM shop.customers LIMIT 1;" 2>&1 || true)
 echo "   raw shop.customers -> ${raw_out##*ERROR:  }"
-echo "$raw_out" | grep -qi "permission denied" || { echo "FAIL: analyst_ai could reach raw PII"; exit 1; }
+echo "$raw_out" | grep -qi "permission denied" || { echo "FAIL: ai_agent could reach raw PII"; exit 1; }
 salt_out=$(aix -c "SELECT salt FROM ai_private.salt_keys LIMIT 1;" 2>&1 || true)
 echo "   ai_private.salt_keys -> ${salt_out##*ERROR:  }"
-echo "$salt_out" | grep -qi "permission denied" || { echo "FAIL: analyst_ai could read the salts"; exit 1; }
+echo "$salt_out" | grep -qi "permission denied" || { echo "FAIL: ai_agent could read the salts"; exit 1; }
 raw_cols=$(docker exec -i "$NAME" psql -U postgres -tA -c "SELECT string_agg(table_name||'.'||column_name, ',') FROM information_schema.columns WHERE table_schema='ai_curated' AND ((table_name='customers' AND column_name IN ('name','email')) OR (table_name='orders' AND column_name='notes'));")
 [ -z "$raw_cols" ] && echo "   curated views expose no raw name/email/notes columns" || { echo "FAIL: raw PII columns in ai_curated: $raw_cols"; exit 1; }
 orders_out=$(aix -c "SELECT * FROM shop.orders LIMIT 1;" 2>&1 || true)
-echo "$orders_out" | grep -qi "permission denied" || { echo "FAIL: analyst_ai could reach shop.orders"; exit 1; }
+echo "$orders_out" | grep -qi "permission denied" || { echo "FAIL: ai_agent could reach shop.orders"; exit 1; }
 echo "   OK: hash works, raw PII blocked (customers + orders), no raw PII columns, salts unreadable."
 
 echo
