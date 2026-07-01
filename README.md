@@ -7,6 +7,8 @@ Point [Claude Code](https://www.anthropic.com/claude-code) at a real PostgreSQL 
 3. **Read the SQL it writes before it runs.** A strong model rarely produces broken SQL; the quieter failure is correct SQL that answers the wrong question.
 4. **Be honest about what leaves your machine.** When the database is in the cloud the SQL runs on the provider's server (your local `psql` only sends the query text and receives rows), and your question, the schema, and the result rows go on to a separate model API.
 
+![The plan: guardrails at the database before the agent ever connects, then psql, then reading every SQL statement before it runs](./images/the-plan-guardrails-first.png)
+
 This repo is the companion to the video. It gives you a small sample database, the exact read-only role commands, and the prompts to try, so you can reproduce the whole thing in a few minutes.
 
 > Channel: [Kyle Chalmers Data Plus AI](https://www.youtube.com/@kylechalmersdataai)
@@ -70,7 +72,7 @@ chmod 0600 ~/.pgpass     # libpq ignores ~/.pgpass unless it's 0600
 Then start Claude Code in this folder and let it connect as `analyst_ro` over Bash, e.g.:
 
 ```bash
-claude "Connect to Postgres as analyst_ro: psql -h localhost -p 55432 -U analyst_ro -d postgres. From now on, write the SQL, show it to me, wait for my OK, then run it."
+claude "Connect to Postgres as analyst_ro: psql -h localhost -p 55432 -U analyst_ro -d postgres. From now on, write the SQL, show it to me, then run it."
 ```
 
 Approve the `psql` Bash call when prompted, then ask in plain English. (The repo's [`CLAUDE.md`](./CLAUDE.md) already tells the agent to connect as `analyst_ro` and to show SQL before running it.)
@@ -105,7 +107,7 @@ chmod 0600 ~/.pgpass
 **4. Point Claude Code at it as `analyst_ro`,** requiring SSL:
 
 ```bash
-claude "Connect to Postgres as analyst_ro: psql 'postgresql://analyst_ro@<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require'. From now on, write the SQL, show it to me, wait for my OK, then run it."
+claude "Connect to Postgres as analyst_ro: psql 'postgresql://analyst_ro@<endpoint>.<region>.aws.neon.tech/<db>?sslmode=require'. From now on, write the SQL, show it to me, then run it."
 ```
 
 **5. Prove it's read-only on the cloud too.** Same as local Step 3, but against the cloud host as `analyst_ro`:
@@ -123,7 +125,7 @@ You are reaching the provider's own cloud with plain `psql`. You do not need the
 
 ## Prompts to try
 
-Set one standing rule for the session first: *"Write the SQL, show it to me, wait for my OK, then run it."* Then:
+Set one standing rule for the session first: *"Write the SQL, show it to me, then run it."* You read the final query as it prints; that is what keeps this faster than writing the SQL yourself, not a manual approval gate on every call. Then:
 
 - "How many orders did we get in May, and what's the total order value?"
 - "Walk the `shop` schema. List the tables, their columns, and how they relate."
@@ -173,6 +175,7 @@ claude-code-postgres/
 ├── docs/
 │   └── apply-to-your-own-database.md # runbook: adapt + safely apply the PII-safe layer to your prod
 ├── images/
+│   ├── the-plan-guardrails-first.png # the three-step plan: guardrails, then psql, then read the SQL
 │   └── egress-boundary.png         # what stays local vs what goes to the model API
 ├── .env.example                    # connection vars (no secrets)
 └── README.md
