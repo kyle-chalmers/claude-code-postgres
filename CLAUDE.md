@@ -31,7 +31,7 @@ Credentials belong in `~/.pgpass` (`chmod 0600`), never inline in a command or i
 
 ## Conventions
 
-- **Write the SQL, show it, wait for approval, then run it.** This is a standing rule for every query, not a one-time ask. The value of an agent here is that a human can read the generated SQL before it executes.
+- **Write the SQL, show it, then run it.** The human reads the final query as it prints. This is not a manual approval gate on every call, that would defeat the point of using an agent. The value of an agent here is that a human can review the generated SQL quickly enough that this stays faster than writing it by hand, not just a swap of one chore for another.
 - **Prefer `ai_agent` (the curated, PII-safe role) for analysis on real data;** `analyst_ro` reads the raw sample only. Only use the admin/owner login to create the schema, roles, or the curated layer.
 - **Never generate or hardcode a password.** When creating the read-only role, emit the SQL with a placeholder and let the human set the secret and run it.
 - **Scope grants to the schema, SELECT only.** `GRANT USAGE ON SCHEMA shop` + `GRANT SELECT ON ALL TABLES IN SCHEMA shop`; set `ALTER DEFAULT PRIVILEGES` so future tables are covered. Never grant write privileges.
